@@ -285,6 +285,26 @@ func TestEtcdService_List(t *testing.T) {
 		})
 	}
 }
+func TestEtcdService_Accounts(t *testing.T) {
+	e := &EtcdService{}
+	got, err := e.Accounts(&ConfigItem{
+		Tenant:      "t1",
+		Project:     "p1",
+		Environment: "e1",
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	if got[0].Username != "kubegems/t1/p1/e1-r" {
+		t.Error("username is not right")
+	}
+	if got[0].Password != "10393af3163a9c82ce2189a5ce267467" {
+		t.Error("password is not right")
+	}
+	if got[1].Username != "kubegems/t1/p1/e1-rw" {
+		t.Error("username is not right")
+	}
+}
 
 // Refrence: https://github.com/etcd-io/etcd/blob/main/client/v3/mock/mockserver/mockserver.go
 

@@ -203,11 +203,11 @@ func (e *EtcdService) preAction(ctx context.Context, mapper *EtcdMapper) error {
 	rUser, rwUser, rRole, rwRole := e.userRolesFor(mapper)
 	var newRUser, newRWUser, newRRole, newRWRole bool
 	if !contains(e.users, rUser) {
-		e.cli.Auth.UserAdd(ctx, rUser, "")
+		e.cli.Auth.UserAdd(ctx, rUser, GenPassword(rUser))
 		newRUser = true
 	}
 	if !contains(e.users, rwUser) {
-		e.cli.Auth.UserAdd(ctx, rwUser, "")
+		e.cli.Auth.UserAdd(ctx, rwUser, GenPassword(rwUser))
 		newRWUser = true
 	}
 	if !contains(e.roles, rRole) {
@@ -236,4 +236,22 @@ func (e *EtcdService) userRolesFor(mapper *EtcdMapper) (rUser, rwUser, rRole, rw
 	rRole = rUser
 	rwRole = rwUser
 	return
+}
+
+func (e *EtcdService) Accounts(item *ConfigItem) ([]Account, error) {
+	mapper, err := mapperForEtcd(item)
+	if err != nil {
+		return nil, err
+	}
+	rUser, rwUser, _, _ := e.userRolesFor(mapper)
+	return []Account{
+		{
+			Username: rUser,
+			Password: GenPassword(rUser),
+		},
+		{
+			Username: rwUser,
+			Password: GenPassword(rwUser),
+		},
+	}, nil
 }

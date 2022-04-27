@@ -1,77 +1,210 @@
 package service
 
 import (
-	"context"
-	"fmt"
+	"strconv"
 
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"kubegems.io/configer/client"
 )
 
 type ConfigService struct {
-	cfgClient client.ConfigClientIface
+	clients map[string]client.ConfigClientIface
+	InfoGetter
+	db *gorm.DB
 }
 
-func (cs *ConfigService) Get(ctx context.Context, tenant, project, env, key string) (string, error) {
-	item := &client.ConfigItem{
-		Tenant:      tenant,
-		Project:     project,
-		Environment: env,
-		Key:         key,
+func NewConfigService(infoGetter InfoGetter, db *gorm.DB) *ConfigService {
+	return &ConfigService{
+		clients:    make(map[string]client.ConfigClientIface),
+		InfoGetter: infoGetter,
+		db:         db,
 	}
-	if err := cs.cfgClient.Get(ctx, item); err != nil {
-		return "", err
-	}
-	return item.Value, nil
-
 }
 
-func (cs *ConfigService) Pub(ctx context.Context, tenant, project, env, key, value string) error {
-	item := &client.ConfigItem{
-		Tenant:      tenant,
-		Project:     project,
-		Environment: env,
-		Key:         key,
-		Value:       value,
-	}
-	if err := cs.cfgClient.Pub(ctx, item); err != nil {
-		return err
-	}
-	return nil
-
+type ResponseStruct struct {
+	Message   string
+	Data      interface{}
+	ErrorData interface{}
 }
 
-func (cs *ConfigService) Delete(ctx context.Context, tenant, project, env, key string) error {
-	item := &client.ConfigItem{
-		Tenant:      tenant,
-		Project:     project,
-		Environment: env,
-		Key:         key,
-	}
-	if err := cs.cfgClient.Delete(ctx, item); err != nil {
-		return err
-	}
-	return nil
+func OK(ctx *gin.Context, data interface{}) {
+	ctx.JSON(200, ResponseStruct{
+		Message:   "OK",
+		Data:      data,
+		ErrorData: nil,
+	})
 }
 
-func (cs *ConfigService) List(ctx context.Context, tenant, project, env string) error {
-	// TODO:
-	items, err := cs.cfgClient.List(ctx, &client.ListOptions{})
+func NotOK(ctx *gin.Context, err error) {
+	ctx.JSON(400, ResponseStruct{
+		Message:   err.Error(),
+		Data:      nil,
+		ErrorData: err.Error(),
+	})
+}
+
+func (cs *ConfigService) ClientOf(item *client.ConfigItem) (string, client.ConfigClientIface, error) {
+	clusterName := cs.InfoGetter.ClusterNameOf(item.Tenant, item.Project, item.Environment)
+	if client, ok := cs.clients[clusterName]; ok {
+		return clusterName, client, nil
+	}
+	addr, uname, password, err := cs.InfoGetter.NacosInfoOf(clusterName)
 	if err != nil {
+		return clusterName, nil, err
+	}
+	rt := cs.InfoGetter.RoundTripperOf(clusterName)
+	client, err := client.NewNacosService(addr, uname, password, rt)
+	if err != nil {
+		return clusterName, nil, err
+	}
+	cs.clients[clusterName] = client
+	return clusterName, client, nil
+}
+
+func paramOrQuery(c *gin.Context, key string) string {
+	if c.Param(key) != "" {
+		return c.Param(key)
+	}
+	return c.Query(key)
+}
+
+func buildConfigItemFromReq(c *gin.Context) *client.ConfigItem {
+	item := &client.ConfigItem{}
+	c.ShouldBindJSON(item)
+	rev, _ := strconv.ParseInt(c.Query("rev"), 10, 64)
+	item.Tenant = paramOrQuery(c, "tenant")
+	item.Project = paramOrQuery(c, "project")
+	item.Environment = paramOrQuery(c, "environment")
+	item.Application = paramOrQuery(c, "application")
+	item.Key = paramOrQuery(c, "key")
+	item.Rev = rev
+	return item
+}
+
+func (cs *ConfigService) withItem(ctx *gin.Context, item *client.ConfigItem, f func(ctx *gin.Context, cli client.ConfigClientIface) error) error {
+	clusterName, client, err := cs.ClientOf(item)
+	cs.setAuditData(ctx, clusterName, item.Tenant, item.Project, item.Environment, item.Application)
+
+	if err != nil {
+		NotOK(ctx, err)
 		return err
 	}
-	fmt.Println(items)
-	return nil
+	return f(ctx, client)
 }
 
-func (cs *ConfigService) History(ctx context.Context, tenant, project, env, key string) ([]*client.HistoryVersion, error) {
-	item := &client.ConfigItem{
-		Tenant:      tenant,
-		Project:     project,
-		Environment: env,
-		Key:         key,
+func (cs *ConfigService) Get(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	if err := cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		return cli.Get(ctx, item)
+	}); err != nil {
+		NotOK(c, err)
+		return
 	}
-	return cs.cfgClient.History(ctx, item)
+	OK(c, item)
 }
 
-func (cs *ConfigService) AccountInfo() {
+func (cs *ConfigService) Pub(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	if err := cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		c.Set("audit_subject", map[string]string{
+			"action": "发布",
+			"module": "配置项",
+			"name":   item.Key,
+		})
+		if e := cli.Pub(c, item); e != nil {
+			return e
+		} else {
+			return UpsertConfigItem(item, cs.db, cs.Username(c))
+		}
+	}); err != nil {
+		NotOK(c, err)
+		return
+	}
+	OK(c, item)
+}
+
+func (cs *ConfigService) Delete(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	if err := cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		c.Set("audit_subject", map[string]string{
+			"action": "删除",
+			"module": "配置项",
+			"name":   item.Key,
+		})
+		if e := cli.Delete(c, item); e != nil {
+			return e
+		} else {
+			return DeleteConfigItem(item, cs.db)
+		}
+	}); err != nil {
+		NotOK(c, err)
+		return
+	}
+	OK(c, item)
+}
+
+func (cs *ConfigService) List(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	page, perr := strconv.Atoi(c.Query("page"))
+	if perr != nil {
+		page = 1
+	}
+	size, serr := strconv.Atoi(c.Query("size"))
+	if serr != nil {
+		size = 10
+	}
+	cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		data, err := cli.List(c, &client.ListOptions{
+			ConfigItem: *item,
+			Page:       page,
+			Size:       size,
+		})
+		FillDates(item, data, cs.db)
+		if err != nil {
+			NotOK(ctx, err)
+		} else {
+			OK(ctx, data)
+		}
+		return err
+	})
+}
+
+func (cs *ConfigService) History(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		data, err := cli.History(c, item)
+		if err != nil {
+			NotOK(ctx, err)
+		} else {
+			OK(ctx, data)
+		}
+		return err
+	})
+}
+
+func (cs *ConfigService) AccountInfo(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		data, err := cli.Accounts(item)
+		if err != nil {
+			NotOK(ctx, err)
+		} else {
+			OK(ctx, data)
+		}
+		return err
+	})
+}
+
+func (cs *ConfigService) setAuditData(c *gin.Context, clusterName, tenant, project, environment, application string) {
+	auditExtraDatas := map[string]string{
+		"tenant":      tenant,
+		"project":     project,
+		"environment": environment,
+		"cluster":     clusterName,
+	}
+	if application != "" {
+		auditExtraDatas["application"] = application
+	}
+	c.Set("audit_extra_datas", auditExtraDatas)
 }

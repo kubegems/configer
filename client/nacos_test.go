@@ -372,13 +372,14 @@ func startNacosMockServer(useRealServer bool) {
 		case http.MethodGet:
 			var retdata []byte
 			c := NacosConfigItem{
-				ID:          "123",
-				Content:     "test config",
-				DataID:      "config",
-				Group:       "dev",
-				Tenant:      "kubegems_ten1_proj1",
-				Md5:         "",
-				CreatedTime: "2010-05-05T00:00:00.000+08:00",
+				ID:               "123",
+				Content:          "test config",
+				DataID:           "config",
+				Group:            "dev",
+				Tenant:           "kubegems_ten1_proj1",
+				Md5:              "",
+				CreatedTime:      "2010-05-05T00:00:00.000+08:00",
+				LastModifiedTime: "2010-05-05T00:00:00.000+08:00",
 			}
 			switch {
 			case r.URL.Query().Get("nid") != "":
@@ -450,7 +451,7 @@ func TestNewNacosService(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewNacosService(tt.args.addr, tt.args.username, tt.args.password)
+			_, err := NewNacosService(tt.args.addr, tt.args.username, tt.args.password, nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewNacosService() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -571,7 +572,7 @@ func TestNacosService_Get(t *testing.T) {
 		},
 	}
 
-	nacos, err := NewNacosService(server.URL, "nacos", "nacos")
+	nacos, err := NewNacosService(server.URL, "nacos", "nacos", nil)
 	if err != nil {
 		t.Errorf("NewNacosService() error = %v", err)
 	}
@@ -649,7 +650,7 @@ func TestNacosService_Pub(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	nacos, err := NewNacosService(server.URL, "nacos", "nacos")
+	nacos, err := NewNacosService(server.URL, "nacos", "nacos", nil)
 	if err != nil {
 		t.Errorf("NewNacosService() error = %v", err)
 	}
@@ -727,7 +728,7 @@ func TestNacosService_Delete(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	nacos, err := NewNacosService(server.URL, "nacos", "nacos")
+	nacos, err := NewNacosService(server.URL, "nacos", "nacos", nil)
 	if err != nil {
 		t.Errorf("NewNacosService() error = %v", err)
 	}
@@ -838,7 +839,7 @@ func TestNacosService_List(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	nacos, err := NewNacosService(server.URL, "nacos", "nacos")
+	nacos, err := NewNacosService(server.URL, "nacos", "nacos", nil)
 	if err != nil {
 		t.Errorf("NewNacosService() error = %v", err)
 	}
@@ -876,7 +877,7 @@ func TestNacosService_History(t *testing.T) {
 			},
 		},
 	}
-	nacos, err := NewNacosService(server.URL, "nacos", "nacos")
+	nacos, err := NewNacosService(server.URL, "nacos", "nacos", nil)
 	if err != nil {
 		t.Errorf("NewNacosService() error = %v", err)
 	}
@@ -891,5 +892,27 @@ func TestNacosService_History(t *testing.T) {
 
 			t.Log(string(bts))
 		})
+	}
+}
+
+func TestNacosService_Accounts(t *testing.T) {
+	nacos := &NacosService{}
+	got, err := nacos.Accounts(&ConfigItem{
+		Tenant:      "t1",
+		Project:     "p1",
+		Environment: "e1",
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	if got[0].Username != "kubegems/t1/p1:e1:r" {
+		t.Error("username is not right")
+	}
+	if got[0].Password != "5096658f1599e2f9b1e677b2838177d2" {
+		t.Log(got[0].Password)
+		t.Error("password is not right")
+	}
+	if got[1].Username != "kubegems/t1/p1:e1:rw" {
+		t.Error("username is not right")
 	}
 }

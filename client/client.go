@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 )
 
 /*
@@ -9,13 +11,16 @@ import (
 */
 
 type ConfigItem struct {
-	Tenant      string
-	Project     string
-	Application string
-	Environment string
-	Key         string
-	Value       string
-	Rev         int64
+	Tenant           string `json:"tenant"`
+	Project          string `json:"project"`
+	Application      string `json:"application"`
+	Environment      string `json:"environment"`
+	Key              string `json:"key"`
+	Value            string `json:"value"`
+	Rev              int64  `json:"rev"`
+	CreatedTime      string `json:"createdTime"`
+	LastModifiedTime string `json:"lastModifiedTime"`
+	LastUpdateUser   string `json:"lastUpdateUser"`
 }
 
 type HistoryVersion struct {
@@ -26,8 +31,13 @@ type HistoryVersion struct {
 
 type ListOptions struct {
 	ConfigItem
-	Page int
-	Size int
+	Page int `json:"page"`
+	Size int `json:"size"`
+}
+
+type Account struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type ConfigClientIface interface {
@@ -36,7 +46,17 @@ type ConfigClientIface interface {
 	Delete(ctx context.Context, item *ConfigItem) error
 	List(ctx context.Context, opts *ListOptions) ([]*ConfigItem, error)
 	History(ctx context.Context, item *ConfigItem) ([]*HistoryVersion, error)
+	Accounts(item *ConfigItem) ([]Account, error)
 }
 
 var _ ConfigClientIface = &NacosService{}
 var _ ConfigClientIface = &EtcdService{}
+
+const salt = "kubegems "
+
+func GenPassword(uname string) string {
+	str := salt + uname
+	h := md5.New()
+	h.Write([]byte(str))
+	return hex.EncodeToString(h.Sum(nil))
+}
