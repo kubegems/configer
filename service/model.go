@@ -9,10 +9,10 @@ import (
 )
 
 type ConfigItem struct {
-	Tenant      string `gorm:"type:varchar(255);uniqueIndex:idx_config_item_tenant_project_environment_key"`
-	Project     string `gorm:"type:varchar(255);uniqueIndex:idx_config_item_tenant_project_environment_key"`
-	Environment string `gorm:"type:varchar(255);uniqueIndex:idx_config_item_tenant_project_environment_key"`
-	Key         string `gorm:"type:varchar(255);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Tenant      string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Project     string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Environment string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Key         string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
 	Application string `gorm:"type:varchar(255)"`
 	// Value          string    `gorm:"type:longtext"`
 	LastUpdateTime time.Time `gorm:"autoUpdateTime"`
