@@ -337,8 +337,8 @@ func (nacos *NacosService) Listener(ctx context.Context, item *ConfigItem) (map[
 }
 
 type ListenerResp struct {
-	CollectStatus           int
-	ListenersGroupkeyStatus map[string]string
+	CollectStatus           int               `json:"collectStatus"`
+	ListenersGroupkeyStatus map[string]string `json:"lisentersGroupkeyStatus"`
 }
 
 type AuthInfo struct {
