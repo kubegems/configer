@@ -286,9 +286,15 @@ func (nacos *NacosService) List(ctx context.Context, opts *ListOptions) ([]*Conf
 	ret := []*ConfigItem{}
 	cmlist := respData.PageItems.(*[]*NacosConfigItem)
 	for _, item := range *cmlist {
-		kitem, err := convert(item)
-		if err != nil {
-			return nil, err
+		kitem := &ConfigItem{
+			Tenant:           opts.ConfigItem.Tenant,
+			Project:          opts.ConfigItem.Project,
+			Application:      item.AppName,
+			Environment:      item.Group,
+			Key:              item.DataID,
+			Value:            item.Content,
+			CreatedTime:      item.CreatedTime,
+			LastModifiedTime: item.LastModifiedTime,
 		}
 		ret = append(ret, kitem)
 	}
