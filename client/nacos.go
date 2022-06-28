@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -26,7 +25,7 @@ import (
 const (
 	LOGIN_PATH    = "/nacos/v1/auth/login"
 	CONFIG_PATH   = "/nacos/v1/cs/configs"
-	LISTENER_PATH = "/nacos/v1/cs/listener"
+	LISTENER_PATH = "/nacos/v1/cs/configs/listener"
 	HISTORY_PATH  = "/nacos/v1/cs/history"
 	TENANT_PATH   = "/nacos/v1/console/namespaces"
 	USER_PATH     = "/nacos/v1/auth/users"
@@ -727,23 +726,6 @@ func (nacos *NacosService) createTenant(tenantid, tenantname string) error {
 		return fmt.Errorf("failed to create nacos namespace, code is %d", resp.StatusCode)
 	}
 	return nil
-}
-
-func convert(nitem *NacosConfigItem) (*ConfigItem, error) {
-	tenseps := strings.SplitN(nitem.Tenant, "_", 3)
-	if len(tenseps) != 3 {
-		return nil, fmt.Errorf("parse tenant to tenant project failed;%v, %v", nitem.Tenant, tenseps)
-	}
-	return &ConfigItem{
-		Tenant:           tenseps[1],
-		Project:          tenseps[2],
-		Application:      nitem.AppName,
-		Environment:      nitem.Group,
-		Key:              nitem.DataID,
-		Value:            nitem.Content,
-		CreatedTime:      nitem.CreatedTime,
-		LastModifiedTime: nitem.LastModifiedTime,
-	}, nil
 }
 
 func (nacos *NacosService) userRolesFor(mapper *NacosDataMapper) (rUser, rwUser, rRole, rwRole, resource string) {
