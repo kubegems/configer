@@ -78,6 +78,12 @@ func (e *EtcdService) Get(ctx context.Context, item *ConfigItem) error {
 	return err
 }
 
+func (e *EtcdService) BaseInfo(ctx context.Context, item *ConfigItem) (map[string]string, error) {
+	return map[string]string{
+		"provider": "etcd",
+	}, nil
+}
+
 func (e *EtcdService) Pub(ctx context.Context, item *ConfigItem) error {
 	mapper, err := mapperForEtcd(item)
 	if err != nil {
@@ -100,6 +106,10 @@ func (e *EtcdService) Delete(ctx context.Context, item *ConfigItem) error {
 	}
 	_, err = e.cli.Delete(ctx, mapper.Key())
 	return err
+}
+
+func (e *EtcdService) Listener(ctx context.Context, item *ConfigItem) (map[string]string, error) {
+	return map[string]string{}, nil
 }
 
 func (e *EtcdService) History(ctx context.Context, item *ConfigItem) ([]*HistoryVersion, error) {

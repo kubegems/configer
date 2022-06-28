@@ -40,6 +40,8 @@ func NewPlugin(infoGetter InfoGetter, db *gorm.DB) (*Plugin, error) {
 func (h *ConfigerHandler) RegistRouter(rg *gin.RouterGroup) {
 	// list configs
 	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment", h.List)
+	// base info
+	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment/baseinfo", h.BaseInfo)
 	// get accounts
 	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment/accounts", h.AccountInfo)
 	// get config item detail
@@ -50,4 +52,6 @@ func (h *ConfigerHandler) RegistRouter(rg *gin.RouterGroup) {
 	rg.DELETE("/configer/tenant/:tenant/project/:project/environment/:environment/key/:key", h.Delete)
 	// get config item history
 	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment/key/:key/history", h.History)
+	// show config item listener
+	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment/key/:key/listener", h.Listener)
 }

@@ -41,12 +41,14 @@ type Account struct {
 }
 
 type ConfigClientIface interface {
+	BaseInfo(ctx context.Context, item *ConfigItem) (map[string]string, error)
 	Get(ctx context.Context, item *ConfigItem) error
 	Pub(ctx context.Context, item *ConfigItem) error
 	Delete(ctx context.Context, item *ConfigItem) error
 	List(ctx context.Context, opts *ListOptions) ([]*ConfigItem, error)
 	History(ctx context.Context, item *ConfigItem) ([]*HistoryVersion, error)
 	Accounts(item *ConfigItem) ([]Account, error)
+	Listener(ctx context.Context, item *ConfigItem) (map[string]string, error)
 }
 
 var _ ConfigClientIface = &NacosService{}

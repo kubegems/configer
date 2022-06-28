@@ -54,6 +54,7 @@ func (cs *ConfigService) ClientOf(item *client.ConfigItem) (string, client.Confi
 		return clusterName, nil, err
 	}
 	rt := cs.InfoGetter.RoundTripperOf(clusterName)
+	// TODO: adapt for more service
 	client, err := client.NewNacosService(addr, uname, password, rt)
 	if err != nil {
 		return clusterName, nil, err
@@ -91,6 +92,21 @@ func (cs *ConfigService) withItem(ctx *gin.Context, item *client.ConfigItem, f f
 		return err
 	}
 	return f(ctx, client)
+}
+
+func (cs *ConfigService) BaseInfo(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	_, client, err := cs.ClientOf(item)
+	if err != nil {
+		NotOK(c, err)
+		return
+	}
+	data, err := client.BaseInfo(c, item)
+	if err != nil {
+		NotOK(c, err)
+		return
+	}
+	OK(c, data)
 }
 
 func (cs *ConfigService) Get(c *gin.Context) {
@@ -174,6 +190,19 @@ func (cs *ConfigService) History(c *gin.Context) {
 	item := buildConfigItemFromReq(c)
 	cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
 		data, err := cli.History(c, item)
+		if err != nil {
+			NotOK(ctx, err)
+		} else {
+			OK(ctx, data)
+		}
+		return err
+	})
+}
+
+func (cs *ConfigService) Listener(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		data, err := cli.Listener(c, item)
 		if err != nil {
 			NotOK(ctx, err)
 		} else {

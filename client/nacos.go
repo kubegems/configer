@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -23,15 +24,16 @@ import (
 */
 
 const (
-	LOGIN_PATH   = "/nacos/v1/auth/login"
-	CONFIG_PATH  = "/nacos/v1/cs/configs"
-	HISTORY_PATH = "/nacos/v1/cs/history"
-	TENANT_PATH  = "/nacos/v1/console/namespaces"
-	USER_PATH    = "/nacos/v1/auth/users"
-	PERM_PATH    = "/nacos/v1/auth/permissions"
-	ROLE_PATH    = "/nacos/v1/auth/roles"
-	DEFAULT_PAGE = 1
-	DEFAULT_SIZE = 500
+	LOGIN_PATH    = "/nacos/v1/auth/login"
+	CONFIG_PATH   = "/nacos/v1/cs/configs"
+	LISTENER_PATH = "/nacos/v1/cs/listener"
+	HISTORY_PATH  = "/nacos/v1/cs/history"
+	TENANT_PATH   = "/nacos/v1/console/namespaces"
+	USER_PATH     = "/nacos/v1/auth/users"
+	PERM_PATH     = "/nacos/v1/auth/permissions"
+	ROLE_PATH     = "/nacos/v1/auth/roles"
+	DEFAULT_PAGE  = 1
+	DEFAULT_SIZE  = 500
 )
 
 type traverseFunc func(page, size int) error
@@ -117,6 +119,19 @@ func (nacos *NacosService) getHistory(ctx context.Context, mapper *NacosDataMapp
 		return "", err
 	}
 	return data.Content, nil
+}
+
+func (nacos *NacosService) BaseInfo(ctx context.Context, item *ConfigItem) (map[string]string, error) {
+	baseMap := map[string]string{
+		"provider": "nacos",
+	}
+	mapper, err := mapperForNacos(item)
+	if err != nil {
+		return baseMap, err
+	}
+	baseMap["nacos_tenant"] = mapper.TenantID()
+	baseMap["nacos_group"] = mapper.Group()
+	return baseMap, nil
 }
 
 func (nacos *NacosService) Get(ctx context.Context, item *ConfigItem) error {
@@ -296,6 +311,29 @@ func (nacos *NacosService) Accounts(item *ConfigItem) ([]Account, error) {
 			Password: GenPassword(rwUser),
 		},
 	}, nil
+}
+
+func (nacos *NacosService) Listener(ctx context.Context, item *ConfigItem) (map[string]string, error) {
+	mapper, err := mapperForNacos(item)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := nacos.client.Get(nacos.urlFor(mapper, LISTENER_PATH))
+	if err != nil {
+		return nil, err
+	}
+	respData := &ListenerResp{
+		ListenersGroupkeyStatus: map[string]string{},
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
+		return nil, err
+	}
+	return respData.ListenersGroupkeyStatus, nil
+}
+
+type ListenerResp struct {
+	CollectStatus           int
+	ListenersGroupkeyStatus map[string]string
 }
 
 type AuthInfo struct {
@@ -770,7 +808,10 @@ func mapperForNacos(item *ConfigItem) (*NacosDataMapper, error) {
 }
 
 func (c *NacosDataMapper) TenantID() string {
-	return fmt.Sprintf("kubegems_%s_%s", c.item.Tenant, c.item.Project)
+	hash := sha1.New()
+	b := "kubegems_" + c.item.Tenant + "_" + c.item.Project
+	hash.Write([]byte(b))
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 func (c *NacosDataMapper) Tenant() string {
