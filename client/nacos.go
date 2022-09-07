@@ -23,16 +23,20 @@ import (
 */
 
 const (
-	LOGIN_PATH    = "/nacos/v1/auth/login"
-	CONFIG_PATH   = "/nacos/v1/cs/configs"
-	LISTENER_PATH = "/nacos/v1/cs/configs/listener"
-	HISTORY_PATH  = "/nacos/v1/cs/history"
-	TENANT_PATH   = "/nacos/v1/console/namespaces"
-	USER_PATH     = "/nacos/v1/auth/users"
-	PERM_PATH     = "/nacos/v1/auth/permissions"
-	ROLE_PATH     = "/nacos/v1/auth/roles"
-	DEFAULT_PAGE  = 1
-	DEFAULT_SIZE  = 500
+	LOGIN_PATH      = "/nacos/v1/auth/login"
+	CONFIG_PATH     = "/nacos/v1/cs/configs"
+	LISTENER_PATH   = "/nacos/v1/cs/configs/listener"
+	HISTORY_PATH    = "/nacos/v1/cs/history"
+	TENANT_PATH     = "/nacos/v1/console/namespaces"
+	USER_PATH       = "/nacos/v1/auth/users"
+	PERM_PATH       = "/nacos/v1/auth/permissions"
+	ROLE_PATH       = "/nacos/v1/auth/roles"
+	DEFAULT_PAGE    = 1
+	DEFAULT_SIZE    = 500
+	TenantCacheTime = time.Minute * 10
+	UsersCacheTime  = time.Minute * 30
+	PermsCacheTime  = time.Minute * 30
+	RolesCacheTime  = time.Minute * 30
 )
 
 type traverseFunc func(page, size int) error
@@ -51,7 +55,12 @@ type NacosService struct {
 	users            []*NacosUser
 	perms            []*NacosPerm
 	roles            []*NacosRole
-	syncLock         sync.Mutex
+
+	tenantsLastUpdateTime *time.Time
+	usersLastUpdateTime   *time.Time
+	permsLastUpdateTime   *time.Time
+	rolesLastUpdateTime   *time.Time
+	syncLock              sync.Mutex
 }
 
 type roundTripWrapper struct {
@@ -409,56 +418,77 @@ func (nacos *NacosService) preAction(mapper *NacosDataMapper) error {
 		2. 是否存在用户, 不存在就创建
 		3. 是否存在权限, 不存在就创建
 		4. 是否存在资源权限绑定，不存在就创建
+
+		五分钟缓存过期
 	*/
 	var (
 		existTenant, existRUser, existRWUser, existRRole, existRWRole, existRPerm, existRWPerm bool
 	)
 	rUser, rwUser, rRole, rwRole, resource := nacos.userRolesFor(mapper)
 	tenantName, tenantID := mapper.Tenant(), mapper.TenantID()
-	for _, exist := range nacos.tenants {
-		if tenantName == exist.NamepsaceShowName && tenantID == exist.Namespace {
-			existTenant = true
-			break
-		}
-	}
-	for _, user := range nacos.users {
-		if user.Username == rwUser {
-			existRWUser = true
-			break
-		}
-	}
-	for _, user := range nacos.users {
-		if user.Username == rUser {
-			existRUser = true
-			break
+	now := time.Now()
+	if now.Sub(*nacos.tenantsLastUpdateTime).Nanoseconds() > TenantCacheTime.Nanoseconds() {
+		existTenant = false
+	} else {
+		for _, exist := range nacos.tenants {
+			if tenantName == exist.NamepsaceShowName && tenantID == exist.Namespace {
+				existTenant = true
+				break
+			}
 		}
 	}
 
-	for _, role := range nacos.roles {
-		if role.Role == rRole && role.Username == rUser {
-			existRRole = true
-			break
+	if now.Sub(*nacos.usersLastUpdateTime).Nanoseconds() > UsersCacheTime.Nanoseconds() {
+		existRUser = false
+		existRWUser = false
+	} else {
+		for _, user := range nacos.users {
+			if user.Username == rwUser {
+				existRWUser = true
+				break
+			}
+		}
+		for _, user := range nacos.users {
+			if user.Username == rUser {
+				existRUser = true
+				break
+			}
 		}
 	}
 
-	for _, role := range nacos.roles {
-		if role.Role == rwRole && role.Username == rwUser {
-			existRWRole = true
-			break
+	if now.Sub(*nacos.rolesLastUpdateTime).Nanoseconds() > RolesCacheTime.Nanoseconds() {
+		existRRole = false
+		existRWRole = false
+	} else {
+		for _, role := range nacos.roles {
+			if role.Role == rRole && role.Username == rUser {
+				existRRole = true
+				break
+			}
+		}
+		for _, role := range nacos.roles {
+			if role.Role == rwRole && role.Username == rwUser {
+				existRWRole = true
+				break
+			}
 		}
 	}
 
-	for _, perm := range nacos.perms {
-		if perm.Resource == resource && perm.Role == rRole && perm.Action == "r" {
-			existRPerm = true
-			break
+	if now.Sub(*nacos.permsLastUpdateTime).Nanoseconds() > PermsCacheTime.Nanoseconds() {
+		existRPerm = false
+		existRWPerm = false
+	} else {
+		for _, perm := range nacos.perms {
+			if perm.Resource == resource && perm.Role == rRole && perm.Action == "r" {
+				existRPerm = true
+				break
+			}
 		}
-	}
-
-	for _, perm := range nacos.perms {
-		if perm.Resource == resource && perm.Role == rwRole && perm.Action == "rw" {
-			existRWPerm = true
-			break
+		for _, perm := range nacos.perms {
+			if perm.Resource == resource && perm.Role == rwRole && perm.Action == "rw" {
+				existRWPerm = true
+				break
+			}
 		}
 	}
 
@@ -487,6 +517,7 @@ func (nacos *NacosService) preAction(mapper *NacosDataMapper) error {
 			return fmt.Errorf("list tenant failed, %s", err)
 		}
 		nacos.tenants = newTenantList
+		nacos.tenantsLastUpdateTime = &now
 	}
 TenantCheckDone:
 
@@ -522,6 +553,7 @@ TenantCheckDone:
 			return fmt.Errorf("list user failed, %s", err)
 		}
 		nacos.users = newUserList
+		nacos.usersLastUpdateTime = &now
 	}
 UserCheckDone:
 
@@ -557,7 +589,7 @@ UserCheckDone:
 			return fmt.Errorf("list role failed, %s", err)
 		}
 		nacos.roles = newRoleList
-
+		nacos.rolesLastUpdateTime = &now
 	}
 RoleCheckDone:
 
@@ -593,6 +625,7 @@ RoleCheckDone:
 			return fmt.Errorf("list perm failed, %s", err)
 		}
 		nacos.perms = newPermList
+		nacos.permsLastUpdateTime = &now
 	}
 PermCheckDone:
 	return nil
