@@ -78,6 +78,7 @@ func (rw roundTripWrapper) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func NewNacosService(addr, username, password string, baseRoundTripper http.RoundTripper) (*NacosService, error) {
+	lastUpdateTime := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.Local)
 	nacos := &NacosService{
 		client:           &http.Client{},
 		username:         username,
@@ -89,7 +90,12 @@ func NewNacosService(addr, username, password string, baseRoundTripper http.Roun
 		users:            []*NacosUser{},
 		perms:            []*NacosPerm{},
 		roles:            []*NacosRole{},
-		syncLock:         sync.Mutex{},
+
+		tenantsLastUpdateTime: &lastUpdateTime,
+		usersLastUpdateTime:   &lastUpdateTime,
+		permsLastUpdateTime:   &lastUpdateTime,
+		rolesLastUpdateTime:   &lastUpdateTime,
+		syncLock:              sync.Mutex{},
 	}
 	if err := nacos.login(); err != nil {
 		return nil, err
