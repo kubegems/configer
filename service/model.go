@@ -52,7 +52,7 @@ func UpsertConfigItem(item *client.ConfigItem, db *gorm.DB, username string) err
 	}
 	e := db.Clauses(clause.OnConflict{
 		UpdateAll: true,
-	}).Create(dbitem).Error
+	}).Save(dbitem).Error
 	if e != nil {
 		return e
 	}
