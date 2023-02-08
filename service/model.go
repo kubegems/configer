@@ -1,10 +1,10 @@
 package service
 
 import (
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"kubegems.io/configer/client"
 )
 
@@ -39,6 +39,11 @@ func Migrate(db *gorm.DB) error {
 }
 
 func UpsertConfigItem(item *client.ConfigItem, db *gorm.DB, username string) error {
+	var (
+		existOne ConfigItem
+		err      error
+		exist    bool
+	)
 	dbitem := &ConfigItem{
 		Tenant:      item.Tenant,
 		Project:     item.Project,
@@ -50,11 +55,33 @@ func UpsertConfigItem(item *client.ConfigItem, db *gorm.DB, username string) err
 	if username != "" {
 		dbitem.LastUpdateUser = username
 	}
-	e := db.Clauses(clause.OnConflict{
-		UpdateAll: true,
-	}).Save(dbitem).Error
-	if e != nil {
-		return e
+	cond := ConfigItem{
+		Tenant:      item.Tenant,
+		Project:     item.Project,
+		Environment: item.Environment,
+		Key:         item.Key,
+	}
+	err = db.Find(&existOne, cond).Error
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	} else {
+		exist = true
+	}
+	if exist {
+		if existOne.Application != item.Application || existOne.Value != item.Value {
+			existOne.Application = item.Application
+			existOne.Value = item.Value
+			existOne.LastUpdateUser = dbitem.LastUpdateUser
+			err = db.Model(&ConfigItem{}).Where(cond).Updates(existOne).Error
+			dbitem = &existOne
+		}
+	} else {
+		err = db.Create(dbitem).Error
+	}
+	if err != nil {
+		return err
 	}
 	item.LastUpdateUser = username
 	item.LastModifiedTime = dbitem.LastUpdateTime.Format(time.RFC3339)
