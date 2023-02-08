@@ -29,9 +29,8 @@ func SyncBackend2Database(conditem *client.ConfigItem, items []*client.ConfigIte
 			if e := UpsertConfigItem(item, db, "syncer_service"); e != nil {
 				return e
 			}
-		} else if dbitem.Value != item.Value {
-			dbitem.Value = item.Value
-			if e := db.Save(dbitem).Error; e != nil {
+		} else if dbitem.Value != item.Value || dbitem.Application != item.Application {
+			if e := UpsertConfigItem(item, db, "syncer_service"); e != nil {
 				return e
 			}
 		}
@@ -47,7 +46,28 @@ func SyncDatabase2Backend(conditem *client.ConfigItem, db *gorm.DB, cli client.C
 		Project:     conditem.Project,
 		Environment: conditem.Environment,
 	})
+	cfgItems, err := cli.List(context.Background(), &client.ListOptions{
+		ConfigItem: *conditem,
+		Page:       1,
+		Size:       1000,
+	})
+	if err != nil {
+		return err
+	}
+	cfgItemsMap := map[string]*client.ConfigItem{}
+	for _, cfgItem := range cfgItems {
+		cfgItemsMap[cfgItem.Key] = cfgItem
+	}
 	for _, dbitem := range dbitems {
+		if dbitem.Value == "" {
+			continue
+		}
+		cfgItem, exist := cfgItemsMap[dbitem.Key]
+		if exist {
+			if cfgItem.Value == dbitem.Value {
+				continue
+			}
+		}
 		if e := cli.Pub(context.Background(), dbitem.ToClientConfigItem()); e != nil {
 			return e
 		}

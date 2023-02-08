@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -194,7 +195,8 @@ func (nacos *NacosService) Pub(ctx context.Context, item *ConfigItem) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("create config failed, code is %d", resp.StatusCode)
+		content, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("create config failed, code is %d, err is (%s)", resp.StatusCode, content)
 	}
 	return nil
 }
