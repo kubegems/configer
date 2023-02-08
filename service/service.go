@@ -237,3 +237,44 @@ func (cs *ConfigService) setAuditData(c *gin.Context, clusterName, tenant, proje
 	}
 	c.Set("audit_extra_datas", auditExtraDatas)
 }
+
+func (cs *ConfigService) SyncBackend2Database(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	if err := cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		c.Set("audit_subject", map[string]string{
+			"action": "备份",
+			"module": "环境下的配置项",
+			"name":   item.Environment,
+		})
+
+		datas, err := cli.List(c, &client.ListOptions{
+			ConfigItem: *item,
+			Page:       1,
+			Size:       1000,
+		})
+		if err != nil {
+			return err
+		}
+		return SyncBackend2Database(item, datas, cs.db)
+	}); err != nil {
+		NotOK(c, err)
+		return
+	}
+	OK(c, item)
+}
+
+func (cs *ConfigService) SyncDatabase2Backend(c *gin.Context) {
+	item := buildConfigItemFromReq(c)
+	if err := cs.withItem(c, item, func(ctx *gin.Context, cli client.ConfigClientIface) error {
+		c.Set("audit_subject", map[string]string{
+			"action": "恢复",
+			"module": "环境下的配置项",
+			"name":   item.Environment,
+		})
+		return SyncDatabase2Backend(item, cs.db, cli)
+	}); err != nil {
+		NotOK(c, err)
+		return
+	}
+	OK(c, item)
+}

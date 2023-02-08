@@ -9,15 +9,29 @@ import (
 )
 
 type ConfigItem struct {
-	Tenant      string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
-	Project     string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
-	Environment string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
-	Key         string `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
-	Application string `gorm:"type:varchar(255)"`
-	// Value          string    `gorm:"type:longtext"`
+	Tenant         string    `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Project        string    `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Environment    string    `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Key            string    `gorm:"type:varchar(192);uniqueIndex:idx_config_item_tenant_project_environment_key"`
+	Application    string    `gorm:"type:varchar(255)"`
+	Value          string    `gorm:"type:longtext"`
 	LastUpdateTime time.Time `gorm:"autoUpdateTime"`
 	CreatedTime    time.Time `gorm:"autoCreateTime"`
 	LastUpdateUser string    `gorm:"type:varchar(255)"`
+}
+
+func (item *ConfigItem) ToClientConfigItem() *client.ConfigItem {
+	return &client.ConfigItem{
+		Tenant:           item.Tenant,
+		Project:          item.Project,
+		Environment:      item.Environment,
+		Key:              item.Key,
+		Application:      item.Application,
+		Value:            item.Value,
+		LastModifiedTime: item.LastUpdateTime.Format(time.RFC3339),
+		CreatedTime:      item.CreatedTime.Format(time.RFC3339),
+		LastUpdateUser:   item.LastUpdateUser,
+	}
 }
 
 func Migrate(db *gorm.DB) error {
@@ -31,8 +45,10 @@ func UpsertConfigItem(item *client.ConfigItem, db *gorm.DB, username string) err
 		Environment: item.Environment,
 		Key:         item.Key,
 		Application: item.Application,
-		// Value:       item.Value,
-		LastUpdateUser: username,
+		Value:       item.Value,
+	}
+	if username != "" {
+		dbitem.LastUpdateUser = username
 	}
 	e := db.Clauses(clause.OnConflict{
 		UpdateAll: true,

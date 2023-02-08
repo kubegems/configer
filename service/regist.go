@@ -54,4 +54,9 @@ func (h *ConfigerHandler) RegistRouter(rg *gin.RouterGroup) {
 	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment/key/:key/history", h.History)
 	// show config item listener
 	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment/key/:key/listener", h.Listener)
+
+	// sync backend data to database
+	rg.POST("/configer/tenant/:tenant/project/:project/environment/:environment/action/backup", h.SyncBackend2Database)
+	rg.POST("/configer/tenant/:tenant/project/:project/environment/:environment/action/restore", h.SyncDatabase2Backend)
+
 }
