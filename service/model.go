@@ -74,7 +74,9 @@ func UpsertConfigItem(item *client.ConfigItem, db *gorm.DB, username string) err
 			existOne.Application = item.Application
 			existOne.Value = item.Value
 			existOne.LastUpdateUser = dbitem.LastUpdateUser
-			err = db.Model(&cond).Updates(existOne).Error
+			err = db.Model(&cond).
+				Where("tenant = ? and project = ? and environment = ? and key = ?", item.Tenant, item.Project, item.Environment, item.Key).
+				Updates(existOne).Error
 			dbitem = &existOne
 		}
 	} else {
