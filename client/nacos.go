@@ -70,7 +70,10 @@ type roundTripWrapper struct {
 }
 
 func (rw roundTripWrapper) RoundTrip(req *http.Request) (*http.Response, error) {
-	wrapperdReq, _ := rw.proxy(req)
+	wrapperdReq, err := rw.proxy(req)
+	if err != nil {
+		return nil, err
+	}
 	req.URL = wrapperdReq
 	req.Header.Add("namespace", "nacos")
 	req.Header.Add("service", "nacos-client")
@@ -103,7 +106,10 @@ func NewNacosService(addr, username, password string, baseRoundTripper http.Roun
 	}
 	fn := func(r *http.Request) (*url.URL, error) {
 		if time.Now().Unix()-nacos.lastLogin.Unix() >= nacos.authInfo.TokenTTL {
-			nacos.login()
+			err := nacos.login()
+			if err != nil {
+				return r.URL, err
+			}
 		}
 		q := r.URL.Query()
 		q.Add("accessToken", nacos.authInfo.AccessToken)
