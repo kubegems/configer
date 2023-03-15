@@ -1,11 +1,13 @@
 package service
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"kubegems.io/configer/client"
+	"kubegems.io/kubegems/pkg/utils/httputil/response"
 )
 
 type ConfigService struct {
@@ -22,26 +24,12 @@ func NewConfigService(infoGetter InfoGetter, db *gorm.DB) *ConfigService {
 	}
 }
 
-type ResponseStruct struct {
-	Message   string
-	Data      interface{}
-	ErrorData interface{}
-}
-
 func OK(ctx *gin.Context, data interface{}) {
-	ctx.JSON(200, ResponseStruct{
-		Message:   "OK",
-		Data:      data,
-		ErrorData: nil,
-	})
+	ctx.JSON(http.StatusOK, response.Response{Data: data})
 }
 
 func NotOK(ctx *gin.Context, err error) {
-	ctx.JSON(400, ResponseStruct{
-		Message:   err.Error(),
-		Data:      nil,
-		ErrorData: err.Error(),
-	})
+	ctx.JSON(http.StatusBadRequest, response.Response{Message: err.Error(), Error: err})
 }
 
 func (cs *ConfigService) ClientOf(item *client.ConfigItem) (string, client.ConfigClientIface, error) {
