@@ -25,7 +25,7 @@ func NewConfigService(infoGetter InfoGetter, db *gorm.DB) *ConfigService {
 }
 
 func OK(ctx *gin.Context, data interface{}) {
-	ctx.JSON(http.StatusOK, response.Response{Data: data})
+	ctx.JSON(http.StatusOK, response.Response{Data: data, Message: "ok", Error: nil})
 }
 
 func NotOK(ctx *gin.Context, err error) {

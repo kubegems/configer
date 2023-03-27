@@ -69,7 +69,7 @@ func (h *RegistryService) ListService(c *gin.Context) {
 	q := &sregistry.ServiceListQuery{}
 	h.do(c, q, func(c *gin.Context, cli sregistry.ServiceRegistryClientIfe) {
 		ret := map[string]interface{}{}
-		if err := cli.ListInstances(q, ret); err != nil {
+		if err := cli.ListServices(q, &ret); err != nil {
 			NotOK(c, err)
 			return
 		}
@@ -81,7 +81,7 @@ func (h *RegistryService) GetService(c *gin.Context) {
 	q := &sregistry.ServiceQuery{}
 	h.do(c, q, func(c *gin.Context, cli sregistry.ServiceRegistryClientIfe) {
 		ret := map[string]interface{}{}
-		if err := cli.RetrieveService(q, ret); err != nil {
+		if err := cli.RetrieveService(q, &ret); err != nil {
 			NotOK(c, err)
 			return
 		}
@@ -92,16 +92,22 @@ func (h *RegistryService) GetService(c *gin.Context) {
 func (h *RegistryService) ListInstances(c *gin.Context) {
 	q := &sregistry.ListInstanceQuery{}
 	h.do(c, q, func(c *gin.Context, cli sregistry.ServiceRegistryClientIfe) {
-		cli.ListInstances(q, nil)
+		ret := map[string]interface{}{}
+		if err := cli.ListInstances(q, &ret); err != nil {
+			NotOK(c, err)
+			return
+		}
+		OK(c, ret)
 	})
 }
 
 func (h *RegistryService) GetInstance(c *gin.Context) {
-	q := &sregistry.RegistInstanceQuery{}
+	q := &sregistry.RetrieveInstanceQuery{}
 	h.do(c, q, func(c *gin.Context, cli sregistry.ServiceRegistryClientIfe) {
 		ret := ""
-		if err := cli.RegistInstance(q, &ret); err != nil {
+		if err := cli.RetrieveInstance(q, &ret); err != nil {
 			NotOK(c, err)
+			return
 		}
 		OK(c, ret)
 	})
@@ -113,6 +119,7 @@ func (h *RegistryService) DeleteInstance(c *gin.Context) {
 		ret := ""
 		if err := cli.DeRegistInstance(q, &ret); err != nil {
 			NotOK(c, err)
+			return
 		}
 		OK(c, ret)
 	})
@@ -121,7 +128,24 @@ func (h *RegistryService) DeleteInstance(c *gin.Context) {
 func (h *RegistryService) ModifyInstance(c *gin.Context) {
 	q := &sregistry.RegistInstanceQuery{}
 	h.do(c, q, func(c *gin.Context, cli sregistry.ServiceRegistryClientIfe) {
-		cli.ModifyInstance(q, nil)
+		ret := ""
+		if err := cli.ModifyInstance(q, &ret); err != nil {
+			NotOK(c, err)
+			return
+		}
+		OK(c, ret)
+	})
+}
+
+func (h *RegistryService) RegistInstance(c *gin.Context) {
+	q := &sregistry.RegistInstanceQuery{}
+	h.do(c, q, func(c *gin.Context, cli sregistry.ServiceRegistryClientIfe) {
+		ret := ""
+		if err := cli.RegistInstance(q, &ret); err != nil {
+			NotOK(c, err)
+			return
+		}
+		OK(c, ret)
 	})
 }
 

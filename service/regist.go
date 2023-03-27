@@ -66,11 +66,13 @@ func (h *Handler) RegistRouter(rg *gin.RouterGroup) {
 	// get service
 	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service", h.GetService)
 	// list instances
-	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service", h.ListInstances)
+	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instances", h.ListInstances)
+	// regist instances
+	rg.POST("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instances", h.RegistInstance)
 	// get  instance
-	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance/:instance", h.GetInstance)
+	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance", h.GetInstance)
 	// delete  instance
-	rg.DELETE("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance/:instance", h.DeleteInstance)
+	rg.DELETE("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance", h.DeleteInstance)
 	// modify instance
-	rg.PUT("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance/:instance", h.ModifyInstance)
+	rg.PUT("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance", h.ModifyInstance)
 }

@@ -1,12 +1,13 @@
 package sregistry
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
-
-	"github.com/pkg/errors"
 
 	"github.com/go-resty/resty/v2"
 	"kubegems.io/configer/utils"
@@ -14,8 +15,9 @@ import (
 
 // 当前直接转发请求
 const (
-	QueryServicePath        = "/nacos/v1/ns/service"
-	QueryServiceListPath    = "/nacos/v1/ns/service/list"
+	QueryServicePath = "/nacos/v1/ns/service"
+	// QueryServiceListPath    = "/nacos/v1/ns/service/list"
+	QueryServiceListPath    = "/nacos/v1/ns/catalog/services"
 	ServiceInstancePath     = "/nacos/v1/ns/instance"
 	ServiceInstanceListPath = "/nacos/v1/ns/instance/list"
 )
@@ -27,66 +29,93 @@ type NacosServiceRegistryClient struct {
 
 func NewNacosServiceRegistryClient(addr, username, password string, baseRoundTripper http.RoundTripper) (*NacosServiceRegistryClient, error) {
 	tokenProvider := utils.NewNacosRoundTripper(addr, username, password, baseRoundTripper)
-	cli := resty.New()
-	cli.SetTransport(tokenProvider.GetRoundTripper())
-	cli.Debug = true
+	cli := resty.New().
+		SetDebug(true).
+		SetDoNotParseResponse(true).
+		SetTransport(tokenProvider.GetRoundTripper())
 	return &NacosServiceRegistryClient{
 		addr: addr,
 		cli:  cli,
 	}, nil
 }
 
-func (nacos *NacosServiceRegistryClient) RetrieveService(query *ServiceQuery, ret interface{}) error {
-	resp, err := nacos.cli.R().SetResult(ret).Get(nacos.addr + QueryServicePath + "?" + query.AsQuery())
-	if resp.StatusCode() >= 400 {
-		return errors.Wrap(err, resp.Status())
+func (nacos *NacosServiceRegistryClient) after(resp *resty.Response, ret interface{}, fmtString string) error {
+	status := resp.StatusCode()
+	body, err := io.ReadAll(resp.RawBody())
+	if err != nil {
+		return fmt.Errorf("read body content error: %e", err)
 	}
-	return err
+	if status >= 400 {
+		return fmt.Errorf(fmtString, body, status)
+	}
+	switch t := ret.(type) {
+	case *map[string]interface{}:
+		if err := json.Unmarshal(body, t); err != nil {
+			return fmt.Errorf("unmarshal error: %v, data is: %s", err, body)
+		}
+		return nil
+	case *string:
+		*t = string(body)
+		return nil
+	default:
+		return fmt.Errorf("unsupported data type %T", t)
+	}
+}
+
+func (nacos *NacosServiceRegistryClient) RetrieveService(query *ServiceQuery, ret interface{}) error {
+	resp, err := nacos.cli.R().Get(nacos.addr + QueryServicePath + "?" + query.AsQuery())
+	if err != nil {
+		return err
+	}
+	return nacos.after(resp, ret, "failed to get service: %s, code is %d")
 }
 
 func (nacos *NacosServiceRegistryClient) ListServices(query *ServiceListQuery, ret interface{}) error {
-	resp, err := nacos.cli.R().SetResult(ret).Get(nacos.addr + QueryServiceListPath + "?" + query.AsQuery())
-	if resp.StatusCode() >= 400 {
-		return errors.Wrap(err, resp.Status())
+	resp, err := nacos.cli.R().Get(nacos.addr + QueryServiceListPath + "?" + query.AsQuery())
+	if err != nil {
+		return err
 	}
-	return err
+	return nacos.after(resp, ret, "failed to list services: %s, code is %d")
 }
 
 func (nacos *NacosServiceRegistryClient) RegistInstance(data *RegistInstanceQuery, ret interface{}) error {
 	resp, err := nacos.cli.R().Post(nacos.addr + ServiceInstancePath + "?" + data.AsQuery())
-	if resp.StatusCode() >= 400 {
-		return errors.Wrap(err, resp.Status())
+	if err != nil {
+		return err
 	}
-	return err
+	return nacos.after(resp, ret, "failed to regist service instance: %s, code is %d")
 }
 
 func (nacos *NacosServiceRegistryClient) DeRegistInstance(instance *DeRegistInstanceQuery, ret interface{}) error {
 	resp, err := nacos.cli.R().Delete(nacos.addr + ServiceInstancePath + "?" + instance.AsQuery())
-	if resp.StatusCode() >= 400 {
-		return errors.Wrap(err, resp.Status())
+	if err != nil {
+		return err
 	}
-	return err
+	return nacos.after(resp, ret, "failed to deregist service instance: %s, code is %d")
 }
 
 func (nacos *NacosServiceRegistryClient) ModifyInstance(data *RegistInstanceQuery, ret interface{}) error {
 	resp, err := nacos.cli.R().Put(nacos.addr + ServiceInstancePath + "?" + data.AsQuery())
-	if resp.StatusCode() >= 400 {
-		return errors.Wrap(err, resp.Status())
+	if err != nil {
+		return err
 	}
-	return err
+	return nacos.after(resp, ret, "failed to modify service instance: %s, code is %d")
 }
 
 func (nacos *NacosServiceRegistryClient) ListInstances(query QueryIface, ret interface{}) error {
 	resp, err := nacos.cli.R().Get(nacos.addr + ServiceInstanceListPath + "?" + query.AsQuery())
-	if resp.StatusCode() >= 400 {
-		return errors.Wrap(err, resp.Status())
+	if err != nil {
+		return err
 	}
-	return err
+	return nacos.after(resp, ret, "failed to list service instance: %s, code is %d")
 }
 
 func (nacos *NacosServiceRegistryClient) RetrieveInstance(query *RetrieveInstanceQuery, ret interface{}) error {
-	nacos.cli.R().Get(nacos.addr + ServiceInstancePath + "?" + query.AsQuery())
-	return nil
+	resp, err := nacos.cli.R().Get(nacos.addr + ServiceInstancePath + "?" + query.AsQuery())
+	if err != nil {
+		return err
+	}
+	return nacos.after(resp, ret, "failed to get service instance: %s, code is %d")
 }
 
 var _ ServiceRegistryClientIfe = &NacosServiceRegistryClient{}
@@ -123,8 +152,8 @@ func (s *ServiceQuery) AsQuery() string {
 }
 
 type ServiceListQuery struct {
-	PageNo   int `form:"pageNo" binding:"required"`
-	PageSize int `form:"pageSize" binding:"required"`
+	PageNo   int `form:"page" binding:"required"`
+	PageSize int `form:"size" binding:"required"`
 	NamespaceGroupNameBase
 }
 
