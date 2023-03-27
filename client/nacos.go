@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 	"sync"
 	"time"
+
+	"kubegems.io/configer/utils"
 )
 
 /*
@@ -43,13 +44,9 @@ const (
 type traverseFunc func(page, size int) error
 
 type NacosService struct {
-	client    *http.Client
-	addr      string
-	username  string
-	password  string
-	authInfo  *AuthInfo
-	lastLogin time.Time
-	once      sync.Once
+	client            *http.Client
+	nacosRoundTripper *utils.NacosRoundTripper
+	addr              string
 
 	baseRoundTripper http.RoundTripper
 	tenants          []*NacosNamespace
@@ -64,36 +61,18 @@ type NacosService struct {
 	syncLock              sync.Mutex
 }
 
-type roundTripWrapper struct {
-	proxy             func(*http.Request) (*url.URL, error)
-	innerRoundWrapper http.RoundTripper
-}
-
-func (rw roundTripWrapper) RoundTrip(req *http.Request) (*http.Response, error) {
-	wrapperdReq, err := rw.proxy(req)
-	if err != nil {
-		return nil, err
-	}
-	req.URL = wrapperdReq
-	req.Header.Add("namespace", "nacos")
-	req.Header.Add("service", "nacos-client")
-	req.Header.Add("port", "8848")
-	return rw.innerRoundWrapper.RoundTrip(req)
-}
-
 func NewNacosService(addr, username, password string, baseRoundTripper http.RoundTripper) (*NacosService, error) {
 	lastUpdateTime := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.Local)
+	nacosRoundTripper := utils.NewNacosRoundTripper(addr, username, password, baseRoundTripper)
 	nacos := &NacosService{
-		client:           &http.Client{},
-		username:         username,
-		password:         password,
-		addr:             addr,
-		once:             sync.Once{},
-		baseRoundTripper: baseRoundTripper,
-		tenants:          []*NacosNamespace{},
-		users:            []*NacosUser{},
-		perms:            []*NacosPerm{},
-		roles:            []*NacosRole{},
+		nacosRoundTripper: nacosRoundTripper,
+		client:            &http.Client{},
+		addr:              addr,
+		baseRoundTripper:  baseRoundTripper,
+		tenants:           []*NacosNamespace{},
+		users:             []*NacosUser{},
+		perms:             []*NacosPerm{},
+		roles:             []*NacosRole{},
 
 		tenantsLastUpdateTime: &lastUpdateTime,
 		usersLastUpdateTime:   &lastUpdateTime,
@@ -101,27 +80,8 @@ func NewNacosService(addr, username, password string, baseRoundTripper http.Roun
 		rolesLastUpdateTime:   &lastUpdateTime,
 		syncLock:              sync.Mutex{},
 	}
-	if err := nacos.login(); err != nil {
-		return nil, err
-	}
-	fn := func(r *http.Request) (*url.URL, error) {
-		if time.Now().Unix()-nacos.lastLogin.Unix() >= nacos.authInfo.TokenTTL {
-			err := nacos.login()
-			if err != nil {
-				return r.URL, err
-			}
-		}
-		q := r.URL.Query()
-		q.Add("accessToken", nacos.authInfo.AccessToken)
-		r.URL.RawQuery = q.Encode()
-		return r.URL, nil
-	}
 	if baseRoundTripper != nil {
-		roundTripper := roundTripWrapper{
-			proxy:             fn,
-			innerRoundWrapper: baseRoundTripper,
-		}
-		nacos.client.Transport = roundTripper
+		nacos.client.Transport = nacosRoundTripper.GetRoundTripper()
 	}
 	return nacos, nil
 }
@@ -176,7 +136,7 @@ func (nacos *NacosService) Get(ctx context.Context, item *ConfigItem) error {
 	if err != nil {
 		return err
 	}
-	content, err := ioutil.ReadAll(resp.Body)
+	content, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -797,36 +757,6 @@ func (nacos *NacosService) urlFor(mapper *NacosDataMapper, path string) string {
 	}
 	u := nacos.addr + path + "?" + q.Encode()
 	return u
-}
-
-func (nacos *NacosService) login() error {
-	q := url.Values{}
-	q.Add("username", nacos.username)
-	q.Add("password", nacos.password)
-	req, _ := http.NewRequest(http.MethodPost, nacos.addr+LOGIN_PATH, nil)
-	req.URL.RawQuery = q.Encode()
-	cli := http.Client{}
-	if nacos.baseRoundTripper != nil {
-		cli.Transport = nacos.baseRoundTripper
-	}
-	req.Header.Add("namespace", "nacos")
-	req.Header.Add("service", "nacos-client")
-	req.Header.Add("port", "8848")
-	resp, err := cli.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to login nacos, code is %d", resp.StatusCode)
-	}
-	authResponse := AuthInfo{}
-	if err := json.NewDecoder(resp.Body).Decode(&authResponse); err != nil {
-		return fmt.Errorf("failed to decode login response, %s", err)
-	}
-	nacos.authInfo = &authResponse
-	nacos.lastLogin = time.Now()
-	return nil
 }
 
 type NacosDataMapper struct {

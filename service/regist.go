@@ -14,13 +14,14 @@ type InfoGetter interface {
 	Username(c *gin.Context) string
 }
 
-type ConfigerHandler struct {
+type Handler struct {
 	*ConfigService
+	*RegistryService
 	db *gorm.DB
 }
 
 type Plugin struct {
-	Handler ConfigerHandler
+	Handler Handler
 }
 
 func (p *Plugin) InitDatabase() error {
@@ -28,16 +29,17 @@ func (p *Plugin) InitDatabase() error {
 }
 
 func NewPlugin(infoGetter InfoGetter, db *gorm.DB) (*Plugin, error) {
-	handler := &ConfigerHandler{
-		ConfigService: NewConfigService(infoGetter, db),
-		db:            db,
+	handler := &Handler{
+		ConfigService:   NewConfigService(infoGetter, db),
+		RegistryService: NewRegistryService(infoGetter),
+		db:              db,
 	}
 	return &Plugin{
 		Handler: *handler,
 	}, nil
 }
 
-func (h *ConfigerHandler) RegistRouter(rg *gin.RouterGroup) {
+func (h *Handler) RegistRouter(rg *gin.RouterGroup) {
 	// list configs
 	rg.GET("/configer/tenant/:tenant/project/:project/environment/:environment", h.List)
 	// base info
@@ -59,4 +61,16 @@ func (h *ConfigerHandler) RegistRouter(rg *gin.RouterGroup) {
 	rg.POST("/configer/tenant/:tenant/project/:project/environment/:environment/action/backup", h.SyncBackend2Database)
 	rg.POST("/configer/tenant/:tenant/project/:project/environment/:environment/action/restore", h.SyncDatabase2Backend)
 
+	// list services
+	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment", h.ListService)
+	// get service
+	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service", h.GetService)
+	// list instances
+	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service", h.ListInstances)
+	// get  instance
+	rg.GET("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance/:instance", h.GetInstance)
+	// delete  instance
+	rg.DELETE("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance/:instance", h.DeleteInstance)
+	// modify instance
+	rg.PUT("/sreg/tenant/:tenant/project/:project/environment/:environment/service/:service/instance/:instance", h.ModifyInstance)
 }
